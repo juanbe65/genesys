@@ -48,7 +48,7 @@
 
         // === CONFIGURAÇÃO ===
 
-        const CLIENT_ID = '949da364-56b5-41f6-a18c-525e4d8ad305'; // OAuth (Authorization Code) com scopes: conversation:messaging:send, conversation:whatsapp:send, conversation:participant:view, user:me (user:me opcional se não for usar API /users/me)
+        const CLIENT_ID = '949da364-56b5-41f6-a18c-525e4d8ad305';  
 
         const ENVIRONMENT = 'sae1.pure.cloud';
 
@@ -85,7 +85,8 @@
 
             try {
 
-                if (!CLIENT_ID || CLIENT_ID === '949da364-56b5-41f6-a18c-525e4d8ad305') {
+                if (!CLIENT_ID )   //|| CLIENT_ID === '949da364-56b5-41f6-a18c-525e4d8ad305') 
+				{
 
                     throw new Error('Configure o CLIENT_ID no HTML.');
 
@@ -317,5 +318,6 @@
 </script>
 </body>
 </html>
+
 
  
