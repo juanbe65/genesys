@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://apps.sae1.pure.cloud/platform/api/genesys-cloud-client-sdk.js"></script>
+<style>
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; padding: 12px; background: #f8f9fa; min-height: 150px; }
+
+        .header { font-size: 14px; font-weight: 600; color: #1a365d; margin-bottom: 8px; }
+
+        .status { background: #e6f3ff; border: 1px solid #b3d9ff; border-radius: 4px; padding: 6px 8px; font-size: 12px; color: #1a5faf; margin-bottom: 8px; }
+
+        .status.success { background: #c6f6d5; border-color: #9ae6b4; color: #22543d; }
+
+        .status.error { background: #fed7d7; border-color: #fc8181; color: #742a2a; }
+
+        .btn { width: 100%; background: #3182ce; color: white; border: none; padding: 8px 10px; border-radius: 4px; font-size: 14px; font-weight: 500; cursor: pointer; }
+
+        .btn:hover { background: #2b6cb0; }
+
+        .btn:disabled { background: #a0aec0; cursor: not-allowed; }
+
+        .hint { font-size: 11px; color: #4a5568; margin-top: 6px; }
+
+        .msg-label { font-size: 12px; color: #4a5568; margin-bottom: 4px; }
+
+        .msg-preview { font-size: 12px; color: #2d3748; background: #edf2f7; border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="header">📱 Envia Mensagem Inicial WhatsApp</div>
+<div id="status" class="status">Inicializando...</div>
+ 
+    <div class="msg-label">Mensagem selecionada pelo Script:</div>
+<div id="msgPreview" class="msg-preview">Carregando seleção (msgId)...</div>
+<button id="sendBtn" class="btn" onclick="sendGreeting()" disabled>
+
+        Enviar saudação com primeiro nome
+</button>
+<div class="hint">
+
+        msgId e firstName vêm do Script via query string. O envio usa /conversations/{id}/messages com user context.
+</div>
+ 
+    <script>
+
+        // === CONFIGURAÇÃO ===
+
+        const CLIENT_ID = '949da364-56b5-41f6-a18c-525e4d8ad305'; // OAuth (Authorization Code) com scopes: conversation:messaging:send, conversation:whatsapp:send, conversation:participant:view, user:me (user:me opcional se não for usar API /users/me)
+
+        const ENVIRONMENT = 'sae1.pure.cloud';
+
+        const API_BASE = 'https://api.sae1.pure.cloud/api/v2/';
+
+       
+	   
+	   
+        let clientApp;
+
+        let currentConversationId;
+
+        let selectedMessageId;
+
+        let selectedMessageText;
+
+        let firstName = '';
+ 
+        function getQueryParam(name) {
+
+            const url = new URL(window.location.href);
+
+            return url.searchParams.get(name);
+
+        }
+
+        async function init() {
+
+            const statusEl = document.getElementById('status');
+
+            const sendBtn = document.getElementById('sendBtn');
+
+            const msgPreview = document.getElementById('msgPreview');
+
+            try {
+
+                if (!CLIENT_ID || CLIENT_ID === '949da364-56b5-41f6-a18c-525e4d8ad305') {
+
+                    throw new Error('Configure o CLIENT_ID no HTML.');
+
+                }
+
+                // 1) Ler parâmetros vindos do Script
+
+                selectedMessageId = getQueryParam('msgId');
+
+                firstName = getQueryParam('firstName') || '';
+
+                if (!firstName) {
+
+                    throw new Error('firstName não informado pelo Script.');
+
+                }
+
+                if (!selectedMessageId || !MESSAGE_MAP[selectedMessageId]) {
+
+                    selectedMessageText = '';
+
+                    msgPreview.textContent = 'msgId inválido ou não mapeado. Verifique o combo do Script.';
+
+                } else {
+
+                    selectedMessageText = MESSAGE_MAP[selectedMessageId];
+
+                    msgPreview.textContent = selectedMessageText;
+
+                }
+
+                statusEl.textContent = 'Conectando...';
+
+                // 2) Inicializar ClientApp (user context)
+
+                clientApp = new GenesysCloudClientApp({
+
+                    clientId: CLIENT_ID,
+
+                    environment: ENVIRONMENT,
+
+                    openCode: '{{OpenCode}}'
+
+                });
+
+                await clientApp.initialize();
+
+                statusEl.className = 'status success';
+
+                statusEl.textContent = '✅ Autenticado. Buscando conversa ativa...';
+
+                // 3) Buscar conversa ativa
+
+                await getActiveConversation();
+
+                clientApp.on('conversationUpdated', getActiveConversation);
+
+            } catch (error) {
+
+                statusEl.className = 'status error';
+
+                statusEl.textContent = '❌ Erro: ' + error.message;
+
+                sendBtn.disabled = true;
+
+            }
+
+        }
+
+        async function getActiveConversation() {
+
+            const statusEl = document.getElementById('status');
+
+            const sendBtn = document.getElementById('sendBtn');
+
+            try {
+
+                const conversations = await clientApp.conversation.getActive();
+
+                if (conversations.length > 0) {
+
+                    currentConversationId = conversations[0].id;
+
+                    statusEl.className = 'status success';
+
+                    statusEl.textContent = '✅ Conversa ativa: ' + currentConversationId.substring(0, 8) + '...';
+
+                    if (selectedMessageText && firstName) {
+
+                        sendBtn.disabled = false;
+
+                    } else {
+
+                        sendBtn.disabled = true;
+
+                    }
+
+                } else {
+
+                    currentConversationId = null;
+
+                    statusEl.className = 'status';
+
+                    statusEl.textContent = 'Nenhuma conversa ativa. Aguarde uma interação ou aceite o WhatsApp.';
+
+                    sendBtn.disabled = true;
+
+                }
+
+            } catch (e) {
+
+                console.error(e);
+
+                statusEl.className = 'status error';
+
+                statusEl.textContent = '❌ Erro ao obter conversa ativa.';
+
+                sendBtn.disabled = true;
+
+            }
+
+        }
+
+        async function sendGreeting() {
+
+            const statusEl = document.getElementById('status');
+
+            const sendBtn = document.getElementById('sendBtn');
+
+            if (!currentConversationId) {
+
+                alert('Nenhuma conversa ativa para enviar a mensagem.');
+
+                return;
+
+            }
+
+            if (!selectedMessageText) {
+
+                alert('Mensagem não mapeada. Verifique o msgId enviado pelo Script.');
+
+                return;
+
+            }
+
+            if (!firstName) {
+
+                alert('firstName não informado pelo Script.');
+
+                return;
+
+            }
+
+            sendBtn.disabled = true;
+
+            sendBtn.textContent = 'Enviando...';
+
+            statusEl.className = 'status';
+
+            statusEl.textContent = 'Enviando mensagem selecionada...';
+
+            try {
+
+                const token = await clientApp.getAccessToken();
+
+                const payload = {
+
+                    body: `Olá, sou ${firstName}. ${selectedMessageText}`,
+
+                    messagingStatus: 'queued'
+
+                };
+
+                const response = await fetch(
+
+                    `${API_BASE}conversations/${currentConversationId}/messages`,
+
+                    {
+
+                        method: 'POST',
+
+                        headers: {
+
+                            'Authorization': `Bearer ${token}`,
+
+                            'Content-Type': 'application/json'
+
+                        },
+
+                        body: JSON.stringify(payload)
+
+                    }
+
+                );
+
+                if (response.ok) {
+
+                    statusEl.className = 'status success';
+
+                    statusEl.textContent = '✅ Mensagem enviada com sucesso.';
+
+                } else {
+
+                    const text = await response.text();
+
+                    throw new Error(text || 'Erro desconhecido ao enviar mensagem.');
+
+                }
+
+            } catch (error) {
+
+                statusEl.className = 'status error';
+
+                statusEl.textContent = '❌ Erro ao enviar mensagem: ' + error.message;
+
+            } finally {
+
+                sendBtn.disabled = false;
+
+                sendBtn.textContent = 'Enviar mensagem com meu nome';
+
+            }
+
+        }
+
+        // Inicializa tudo
+
+        init();
+</script>
+</body>
+</html>
+
+ 
