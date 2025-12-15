@@ -1,245 +1,146 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <title>WhatsApp envio mensagem inicial)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
-      margin: 0;
-      padding: 12px;
-    }
-    .container {
-      background-color: #ffffff;
-      border-radius: 4px;
-      padding: 12px 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-    }
-    h1 {
-      font-size: 16px;
-      margin: 0 0 8px 0;
-    }
-    .status {
-      font-size: 13px;
-      margin-top: 8px;
-      color: #555;
-      white-space: pre-line;
-    }
-    .success {
-      color: #0a7f2e;
-    }
-    .error {
-      color: #b00020;
-    }
-    .details {
-      font-size: 11px;
-      margin-top: 6px;
-      color: #777;
-    }
-    .hidden {
-      display: none;
-    }
-    button {
-      margin-top: 10px;
-      padding: 6px 10px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>Enviando Mensagem WhatsApp (SAE1)</title>
+    <script src="https://sdk-cdn.mypurecloud.com/javascript/latest/purecloud-platform-client-v2.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; font-size: 14px; color: #333; text-align: center; padding: 20px; }
+        .loading { color: #0056b3; font-weight: bold; }
+        .success { color: #28a745; font-weight: bold; margin-top: 10px;}
+        .error { color: #dc3545; background-color: #f8d7da; padding: 15px; border-radius: 5px; margin-top: 10px; border: 1px solid #dc3545;}
+        .hidden { display: none; }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Mensagem inicial WhatsApp </h1>
-    <div id="status" class="status">Iniciando widget…</div>
-    <div id="details" class="details hidden"></div>
-    <button id="retryBtn" class="hidden">Tentar novamente</button>
-  </div>
+    <h3>Processando Envio...</h3>
+    <div id="status" class="loading">Iniciando SDK (São Paulo)...</div>
 
-  <script>
-    // ====== CONFIGURAÇÕES ======
-    
-    const ENVIRONMENT = 'https://api.sae1.pure.cloud';
+    <script>
+        // --- 1. CONFIGURAÇÃO INICIAL ---
+        const CLIENT_ID = '949da364-56b5-41f6-a18c-525e4d8ad305'; // <--- INSIRA SEU CLIENT ID AQUI
+        
+        // A Região de São Paulo deve ser configurada exatamente assim:
+        const REGION = 'sae1.pure.cloud'; 
 
-    // ====== UTILITÁRIOS ======
-    function getQueryParam(name) {
-      const url = new URL(window.location.href);
-      return url.searchParams.get(name);
-    }
+        // Captura a URL atual para o redirecionamento pós-login
+        const REDIRECT_URI = window.location.href.split('?')[0]; 
 
-    function setStatus(message, type) {
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = message;
-      statusEl.classList.remove('success', 'error');
-      if (type === 'success') statusEl.classList.add('success');
-      if (type === 'error') statusEl.classList.add('error');
-    }
+        // --- 2. INICIALIZAÇÃO DO SDK (CORREÇÃO WEB) ---
+        // Em HTML puro, não usamos 'require'. Usamos o objeto global window.platformClient
+        const platformClient = window.platformClient;
+        const client = platformClient.ApiClient.instance;
+        
+        // Configura a região para São Paulo
+        client.setEnvironment(REGION);
+        
+        // Persistência mantém o token salvo para não recarregar login toda vez
+        client.setPersistSettings(true, 'whatsapp_sender_sae1');
 
-    function setDetails(message) {
-      const detailsEl = document.getElementById('details');
-      if (message) {
-        detailsEl.textContent = message;
-        detailsEl.classList.remove('hidden');
-      } else {
-        detailsEl.textContent = '';
-        detailsEl.classList.add('hidden');
-      }
-    }
-
-    function showRetry(show) {
-      const btn = document.getElementById('retryBtn');
-      if (show) btn.classList.remove('hidden');
-      else btn.classList.add('hidden');
-    }
-
-    // ====== CANNED RESPONSE: buscar e aplicar placeholder ======
-    async function getCannedResponseWithAgent(token, responseId) {
-      const agentName = getQueryParam('agentName') || '';
-      const placeholder = getQueryParam('placeholder') || '{{Agent_name}}'; // default comum. 
-      if (!responseId) {
-        throw new Error('msgId (ID da canned response) não informado na URL.');
-      }
-
-      const url = `${ENVIRONMENT}/api/v2/responses/${encodeURIComponent(responseId)}`; 
-
-      const resp = await fetch(url, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!resp.ok) {
-        const t = await resp.text().catch(() => '');
-        throw new Error(`Erro ao buscar canned response ${responseId}. HTTP ${resp.status}: ${t}`);
-      }
-
-      const data = await resp.json();
-
-      // Campo típico para responses de mensagem. 
-      let text = data.text || (data.message && data.message.body) || '';
-      if (!text) {
-        throw new Error(`Canned response ${responseId} não possui texto utilizável.`);
-      }
-
-      // Substitui exatamente o placeholder informado pelo Script.
-      // Exemplo: Script manda "{{Agent_name}}" ou "{{AGENT_NAME}}". 
-      const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedPlaceholder, 'g');
-      text = text.replace(regex, agentName);
-
-      return text;
-    }
-
-    // ====== CONTEXTO DO CLIENT APP / CONVERSA ======
-    async function getClientContext() {
-      if (!window.clientApp) {
-        throw new Error('ClientApp SDK não disponível no contexto da página.');
-      }
-
-      const clientApp = window.clientApp;
-
-      const token = await clientApp.oauth.getToken(); // [web:368]
-      const active = await clientApp.conversation.getActive(); // [web:378]
-
-      if (!active || !active.length) {
-        throw new Error('Nenhuma conversa ativa encontrada no contexto do agente.');
-      }
-
-      const conversation = active[0];
-
-      // 
-      // Aqui tenta achar uma comunicação de mensagem (WhatsApp) em participants[].messages
-      let whatsappComm = null;
-      if (Array.isArray(conversation.participants)) {
-        for (const p of conversation.participants) {
-          if (Array.isArray(p.messages)) {
-            whatsappComm = p.messages.find(
-              m => m.mediaType === 'message' || m.mediaType === 'messaging'
-            );
-            if (whatsappComm) break;
-          }
+        // --- 3. UTILITÁRIOS DE TELA ---
+        const statusDiv = document.getElementById('status');
+        function updateStatus(msg, type) {
+            statusDiv.innerHTML = msg;
+            statusDiv.className = type || "loading";
         }
-      }
 
-      if (!whatsappComm) {
-        throw new Error('Não foi possível identificar a comunicação de mensagem (WhatsApp) na conversa ativa.');
-      }
+        // --- 4. LÓGICA PRINCIPAL ---
+        
+        // Captura parâmetros da URL vindos do Script
+        const urlParams = new URLSearchParams(window.location.search);
+        const conversationId = urlParams.get('conversationId'); 
+        const responseId = urlParams.get('responseId');
+        const varName = urlParams.get('varName');
+        const varValue = urlParams.get('varValue');
 
-      return {
-        token,
-        conversationId: conversation.id,
-        communicationId: whatsappComm.id
-      };
-    }
+        // Inicia Autenticação Implicit Grant
+        client.loginImplicitGrant(CLIENT_ID, REDIRECT_URI)
+            .then(() => {
+                console.log("Autenticado com sucesso na região " + REGION);
 
-    // ====== ENVIO DA MENSAGEM PARA WHATSAPP ======
-    async function sendGreetingFromCanned() {
-      showRetry(false);
-      setDetails('');
+                if (!conversationId || !responseId) {
+                    throw new Error("Parâmetros obrigatórios ausentes (conversationId ou responseId).");
+                }
 
-      const msgId = getQueryParam('msgId');
-      const agentName = getQueryParam('agentName') || '';
-      const placeholder = getQueryParam('placeholder') || '{{Agent_name}}';
+                updateStatus("Buscando modelo de resposta...");
+                
+                // Instancia APIs
+                const responseApi = new platformClient.ResponseManagementApi();
+                const conversationsApi = new platformClient.ConversationsApi();
 
-      if (!msgId) {
-        throw new Error('msgId (ID da canned response) não informado.');
-      }
+                // Busca o texto da Canned Response
+                // Passamos conversationsApi.getConversation adiante para otimizar o fluxo
+                return Promise.all([
+                    responseApi.getResponsemanagementResponse(responseId),
+                    conversationsApi.getConversation(conversationId)
+                ]);
+            })
+            .then(([cannedResponse, conversation]) => {
+                // --- TRATAMENTO DO TEXTO DA MENSAGEM ---
+                let messageText = "";
 
-      setStatus('Obtendo contexto da conversa…', null);
-      const { token, conversationId, communicationId } = await getClientContext();
+                // Verifica se a resposta tem texto
+                if (cannedResponse.texts && cannedResponse.texts.length > 0) {
+                    messageText = cannedResponse.texts[0].content;
+                } else {
+                    throw new Error("A Canned Response selecionada está vazia.");
+                }
 
-      setStatus('Carregando canned response e aplicando placeholder…', null);
-      const text = await getCannedResponseWithAgent(token, msgId);
+                // Substituição da Variável (Ex: {{NOME}} -> João)
+                if (varName && varValue) {
+                    console.log(`Substituindo {{${varName}}} por "${varValue}"`);
+                    // Cria Regex seguro para substituir todas as ocorrências
+                    const regex = new RegExp('{{' + varName + '}}', 'gi');
+                    messageText = messageText.replace(regex, varValue);
+                }
 
-      setStatus('Enviando mensagem inicial pelo WhatsApp…', null);
+                updateStatus("Localizando cliente na conversa...");
 
-      // Endpoint típico para enviar mensagem em conversa de mensagens existente. 
-      const url =
-        `${ENVIRONMENT}/api/v2/conversations/messages/${encodeURIComponent(conversationId)}` +
-        `/communications/${encodeURIComponent(communicationId)}/messages`;
+                // --- LOCALIZAÇÃO DO COMMUNICATION ID ---
+                // Procura participante do tipo 'customer' ou 'external'
+                const customer = conversation.participants.find(p => p.purpose === 'customer' || p.purpose === 'external');
+                
+                if (!customer) throw new Error("Participante 'customer' não encontrado.");
+                
+                // O WhatsApp sempre gera uma sessão de mensagens. Pegamos o ID dela.
+                // Nota: Verificamos se existe o array messages e se tem itens.
+                const messageSession = (customer.messages && customer.messages.length > 0) 
+                                        ? customer.messages[0] 
+                                        : null;
 
-      const body = { body: text };
+                if (!messageSession) {
+                    // Fallback: Tenta buscar chamadas (calls) se for um cenário hibrido, mas foco é msg
+                    throw new Error("Sessão de mensagem (messageId) não encontrada para o cliente.");
+                }
 
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      });
+                const communicationId = messageSession.id;
 
-      if (!resp.ok) {
-        const errorText = await resp.text().catch(() => '');
-        throw new Error(`Erro ao enviar mensagem. HTTP ${resp.status}: ${errorText}`);
-      }
+                updateStatus("Enviando mensagem (Contexto do Agente)...");
 
-      setStatus('Mensagem inicial enviada com sucesso usando canned response.', 'success');
-      setDetails(
-        `Canned: ${msgId}\nAgente: ${agentName}\nPlaceholder: ${placeholder}\nConversationId: ${conversationId}\nCommunicationId: ${communicationId}`
-      );
-    }
+                // --- ENVIO FINAL ---
+                const conversationsApi = new platformClient.ConversationsApi();
+                const body = { "textBody": messageText };
 
-    // ====== INICIALIZAÇÃO ======
-    async function init() {
-      try {
-        setStatus('Iniciando widget de saudação WhatsApp (canned)…', null);
-        await sendGreetingFromCanned();
-      } catch (e) {
-        console.error(e);
-        setStatus('Erro ao enviar a mensagem inicial.', 'error');
-        setDetails(e.message || String(e));
-        showRetry(true);
-      }
-    }
-
-    document.getElementById('retryBtn').addEventListener('click', () => {
-      init();
-    });
-
-    document.addEventListener('DOMContentLoaded', () => {
-      init();
-    });
-  </script>
+                // Endpoint: /api/v2/conversations/messages/{conversationId}/communications/{communicationId}/messages
+                return conversationsApi.postConversationsMessagesCommunicationMessages(
+                    conversationId, 
+                    communicationId, 
+                    body
+                );
+            })
+            .then(() => {
+                updateStatus("Mensagem enviada com sucesso!", "success");
+                console.log("Envio concluído.");
+            })
+            .catch((err) => {
+                console.error("Erro no processo:", err);
+                // Tenta extrair mensagem de erro legível da API
+                let errorMsg = err.message;
+                if(err.body && err.body.message) {
+                    errorMsg += " - " + err.body.message;
+                }
+                updateStatus("Falha: " + errorMsg, "error");
+            });
+    </script>
 </body>
 </html>
