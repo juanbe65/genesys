@@ -13,6 +13,23 @@
     </style>
 </head>
 <body>
+fetch('https://sdk-cdn.mypurecloud.com/javascript/latest/purecloud-platform-client-v2.min.js')
+  .then(resp => {
+    if (resp.ok) {
+      console.log('✅ CDN acessível dentro do iframe');
+    } else {
+      console.error('⚠️ CDN respondeu com erro:', resp.status);
+    }
+  })
+  .catch(err => {
+    console.error('❌ Erro ao acessar CDN dentro do iframe:', err);
+    document.getElementById('status').innerText = 'Falha ao acessar CDN.';
+  });
+
+
+
+    
+    
     <h3>Processando Envio...</h3>
     <div id="status" class="loading">Iniciando SDK (São Paulo)...</div>
 
@@ -144,3 +161,4 @@
     </script>
 </body>
 </html>
+
