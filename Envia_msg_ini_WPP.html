@@ -13,7 +13,15 @@
     </style>
 </head>
 <body>
-        <script>
+
+
+    
+    <h3>Processando Envio...</h3>
+    <div id="status" class="loading">Iniciando SDK (São Paulo)...</div>
+
+    <script>
+
+            
 fetch('https://sdk-cdn.mypurecloud.com/javascript/latest/purecloud-platform-client-v2.min.js')
   .then(resp => {
     if (resp.ok) {
@@ -29,12 +37,8 @@ fetch('https://sdk-cdn.mypurecloud.com/javascript/latest/purecloud-platform-clie
 
 
 
-    
-    
-    <h3>Processando Envio...</h3>
-    <div id="status" class="loading">Iniciando SDK (São Paulo)...</div>
 
-//    <script>
+        
         // --- 1. CONFIGURAÇÃO INICIAL ---
         const CLIENT_ID = '949da364-56b5-41f6-a18c-525e4d8ad305'; // <--- INSIRA SEU CLIENT ID AQUI
         
@@ -162,5 +166,6 @@ fetch('https://sdk-cdn.mypurecloud.com/javascript/latest/purecloud-platform-clie
     </script>
 </body>
 </html>
+
 
 
